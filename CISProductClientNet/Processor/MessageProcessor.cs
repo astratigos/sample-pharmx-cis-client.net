@@ -1,7 +1,6 @@
 ﻿using Azure.Messaging.ServiceBus;
 using DataSync.Shared.SDK;
 using MediatR;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,19 +12,16 @@ namespace CISProductClientNet.Processors
     {
         private readonly ILogger<MessageProcessor> _logger;
         private readonly IDataSyncClient _dataSyncClient;
-        private readonly IConfiguration _config;
         private readonly IServiceScopeFactory _serviceScopeFactory;
 
         public MessageProcessor(
             ILogger<MessageProcessor> logger,
             IDataSyncClient dataSyncClient,
-            IConfiguration configuration,
             IServiceScopeFactory serviceScopeFactory
         )
         {
             _logger = logger;
             _dataSyncClient = dataSyncClient;
-            _config = configuration;
             _serviceScopeFactory = serviceScopeFactory;
 
         }
@@ -54,15 +50,28 @@ namespace CISProductClientNet.Processors
             {
                 Stopwatch stopWatch = Stopwatch.StartNew();
                 var mediatR = scope.ServiceProvider.GetService<IMediator>();
-                await mediatR.Publish(new Commands.DataSyncMessageReceivedEvent(eventArgs.DataSyncMessage));
-                await eventArgs.CompleteAsync();
+
+                try
+                {
+                    await mediatR.Publish(new Commands.DataSyncMessageReceivedEvent(eventArgs.DataSyncMessage));
+                    await eventArgs.CompleteAsync();
+                    _logger.LogInformation($"[SUCCESS] Message Processed: {eventArgs.DataSyncMessage.MessageId}. Type: {eventArgs.DataSyncMessage.MessageType}. ms: {stopWatch.Elapsed.TotalMilliseconds}");
+                }
+                catch (Exception e)
+                {
+                    _logger.LogInformation($"[FAILED] Message Processed: {eventArgs.DataSyncMessage.MessageId}. Type: {eventArgs.DataSyncMessage.MessageType}. ms: {stopWatch.Elapsed.TotalMilliseconds}. Error: {e.Message}");
+                    throw;
+                }
+                finally
+                {
+                    stopWatch.Stop();
+                }
             }
         }
 
         private Task ErrorHandler(ProcessErrorEventArgs args)
         {
-            // TODO: Handle Handler Errors Here.
-            Console.WriteLine(args.Exception.ToString());
+            // TODO: Handle any other error Here.
             return Task.CompletedTask;
         }
     }

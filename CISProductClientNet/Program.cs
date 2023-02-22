@@ -1,9 +1,10 @@
-﻿using CISProductClientNet.Behaviours;
-using CISProductClientNet.Processors;
+﻿using CISProductClientNet.Processors;
 using DataSync.Shared.SDK;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Reflection;
 
 IHost host = Host.CreateDefaultBuilder(args)
@@ -14,32 +15,26 @@ IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         var Configuration = context.Configuration;
-        services.AddMediatR(cfg =>
-        {
-            cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
-            cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));
-        });
+        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
         services.AddSingleton<IDataSyncClient>(x => new DataSyncClient(
             siteID: Configuration["DataSync:SiteID"],
             serviceID: Configuration["DataSync:ServiceID"],
             inboundKey: new DataSyncClientKey()
             {
-                SharedAccessKeyName = $"{Configuration["DataSync:SiteID"]}.{Configuration["DataSync:ServiceID"]}",
+                SharedAccessKeyName = $"{Configuration["DataSync:SiteID"]}",
                 SharedAccessKey = Configuration["DataSync:InboundSharedAccessKey"],
             },
             outboundKey: new DataSyncClientKey()
             {
-                SharedAccessKeyName = $"{Configuration["DataSync:SiteID"]}.{Configuration["DataSync:ServiceID"]}",
+                SharedAccessKeyName = $"{Configuration["DataSync:SiteID"]}",
                 SharedAccessKey = Configuration["DataSync:OutboundSharedAccessKey"],
             },
             options: new DataSyncClientOptions()
             {
                 transportType = "Amqp",
-                maxConcurrentSessions = 1,
-                maxConcurrentCallsPerSession = 1,
-                maxConcurrentCalls = 1,
-                autoCompleteMessages = false,
-                prefetchCount = 100
+                maxConcurrentCalls = Configuration.GetValue<int>("DataSync:Options:MaxConcurrentCalls"),
+                prefetchCount = Configuration.GetValue<int>("DataSync:Options:PrefetchCount"),
+                autoCompleteMessages = false
             },
             sessionEnabled: false,
             environment: Configuration["DataSync:Environment"]
